@@ -1,0 +1,70 @@
+//Shading Correction v2.0
+//Copyright Chad J Johnson Nov 2022
+//La Trobe University Bioimaging Platform. 
+
+var channel;
+var channels;
+var frame;
+var frames;
+var slice;
+var slices; 
+var j = 0;
+var i = 0;
+
+waitForUser("Select Image and Channel to Correct");
+OGImage = getTitle();
+Stack.getPosition(channel, slice, frame);
+Stack.getDimensions(width, height, channels, slices, frames);
+waitForUser("Select Background Image and Channel to use for Correction");
+BG = getTitle();
+Stack.getPosition(channel2, slice2, frame2);
+Stack.getDimensions(width2, height2, channels2, slices2, frames2);
+run("Select None");
+
+run("Duplicate...", " ");
+BG_Single = getTitle();
+close(BG);
+selectWindow(BG_Single);
+run("Select All");
+run("Measure")'
+Mean_BG = getResult("Mean");
+
+if (channels > 1){
+	selectWindow();
+run("Split Channels");
+selectWindow("C"+channel+"-"+OGImage);
+Correction = getTitle();
+}else{
+	selectWindow(OGImage);
+	Correction = getTitle();
+}
+
+if (frames > 1){
+for (j = 0; j < frames; j++){
+selectWindow(Correction);
+Stack.setFrame(j+1);
+for (i = 0; i < slices; i++){
+selectWindow(Correction);
+setSlice(i+1);
+Stack.setFrame(j+1);
+Stack.getPosition(channel, slice, frame);
+run("Duplicate...", "duplicate slices="+slice+" frames="+frame);
+Image2 = getTitle();
+run("Calculator Plus", "i1=["+Image2+"] i2=["+BG_Single+"] operation=[Divide: i2 = (i1/i2) x k1 + k2] k1="+Mean_BG+" k2=0 create");
+Image3 = getTitle();
+run("Select All");
+run("Copy");
+selectWindow(Correction);
+run("Paste");
+close(Image2);
+close(Image3);
+}
+}
+}else{
+	run("Calculator Plus", "i1=["+Correction+"] i2=["+BG_Single+"] operation=[Divide: i2 = (i1/i2) x k1 + k2] k1="+Mean_BG+" k2=0 create");
+	rename("DIC");
+	DIC = getTitle();
+	close(BG_Single);
+	close(Correction);
+}
+run("Enhance Contrast", "saturated=0.35");
