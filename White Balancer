@@ -1,6 +1,7 @@
 //White Balancer
+//This script white balances colour images
 
-Dialog.create("White Balancer v1.1");
+Dialog.create("White Balancer v1.3");
 
 Dialog.addMessage("This Macro was written by: \nChad J. Johnson, \nBioimaging Platform, \nLa Trobe University, \nMelbourne, Australia.\nCopyright: August 2022.\nIf you use this macro for your research please reference as appropriate.");
 Dialog.show();
