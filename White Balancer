@@ -1,0 +1,72 @@
+//White Balancer
+
+Dialog.create("White Balancer v1.1");
+
+Dialog.addMessage("This Macro was written by: \nChad J. Johnson, \nBioimaging Platform, \nLa Trobe University, \nMelbourne, Australia.\nCopyright: August 2022.\nIf you use this macro for your research please reference as appropriate.");
+Dialog.show();
+run("Set Measurements...", "area mean perimeter shape integrated limit display redirect=None decimal=3");
+
+waitForUser("Open an Image");
+roiManager("reset");
+Original = getTitle();
+setTool("rectangle");
+makeRectangle(1, 1, 50, 50);
+roiManager("Add");
+roiManager("Show All with labels");
+waitForUser("Resize and Move the ROI to the background. Ensure it contains no part of the sample or debris");
+roiManager("Update");
+roiManager("Show None");
+run("Select None");
+
+run("Duplicate...", " ");
+WorkingCopy = getTitle();
+
+run("Split Channels");
+selectWindow(WorkingCopy+" (red)");
+Red = getTitle();
+roiManager("select", 0);
+run("Measure");
+RedMean = getResult("Mean");
+
+selectWindow(WorkingCopy+" (green)");
+Green = getTitle();
+roiManager("select", 0);
+run("Measure");
+GreenMean = getResult("Mean");
+
+selectWindow(WorkingCopy+" (blue)");
+Blue = getTitle();
+roiManager("select", 0);
+run("Measure");
+BlueMean = getResult("Mean");
+
+Values = newArray(RedMean,BlueMean, GreenMean);
+Array.getStatistics(Values, min, max, mean, std);
+
+RedCorrection = max - RedMean;
+GreenCorrection = max - GreenMean;
+BlueCorection = max - BlueMean;
+RedCorrection = abs(RedCorrection);
+GreenCorrection = abs(GreenCorrection);
+BlueCorrection = abs(BlueCorection);
+
+roiManager("reset");
+
+selectWindow(Red);
+run("Select None");
+run("Add...", "value="+RedCorrection);
+selectWindow(Green);
+run("Select None");
+run("Add...", "value="+GreenCorrection);
+selectWindow(Blue);
+run("Select None");
+run("Add...", "value="+BlueCorrection);
+
+run("Merge Channels...", "c1=["+Red+"] c2=["+Green+"] c3=["+Blue+"] create");
+Merge = getTitle();
+run("RGB Color");
+Final = getTitle();
+close(Merge);
+
+run("Enhance Contrast", "saturated=0.35");
+setMinAndMax(7, 255);
