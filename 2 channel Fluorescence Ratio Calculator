@@ -1,5 +1,6 @@
 //This macro measures nuclear and cytoplasmic fluorescnce in 2 channels and calculates a ratio
 //Built for Lucas Newton, October 2023
+//Run via FIJI Macro
 
 var Version = 3.0;
 var fs = File.separator;
