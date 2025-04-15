@@ -1,0 +1,238 @@
+//This macro measures nuclear and cytoplasmic fluorescnce in 2 channels and calculates a ratio
+//Built for Lucas Newton, October 2023
+
+var Version = 3.0;
+var fs = File.separator;
+var dir1;
+var dir2;
+var string = "";
+var n_lower;
+var n_upper;
+var w_lower;
+var w_upper;
+var i = 0;
+var a;
+var Total_N_IntDen;
+var ImageSize;
+
+//Save results window and close all remaining windows
+
+
+Dialog.create("Cell Analyser v"+Version);
+Dialog.addMessage("This Macro was written by: \nChad J. Johnson, \nBioimaging Platform, \nLa Trobe University, \nMelbourne, Australia.\nCopyright: October 2023.\nIf you use this macro for your research please reference as appropriate.\n ");
+
+Dialog.addMessage ("All open images will now be closed.\n \nPress OK to continue.");
+Dialog.show();
+
+//Initial measurement settings and cleanup
+run("Close All");
+roiManager("reset");
+run("Collect Garbage");
+run("Set Measurements...", "area mean integrated area_fraction display redirect=None decimal=3");
+RoiManager.associateROIsWithSlices(false);
+RoiManager.restoreCentered(false);
+RoiManager.useNamesAsLabels(false);
+
+//Select folder of images for analysis
+dir1 = getDirectory("Choose Image Directory");
+list = getFileList(dir1);
+
+//Create results folder for image output
+StackFolder = File.exists(dir1+"Results"+fs);
+if (StackFolder==0) {
+dir2 = File.makeDirectory(dir1+"Results"+fs);
+}
+if (StackFolder==1) {
+dir2 = dir1+fs+"Results"+fs;
+}
+
+//loop for opening all images within a folder
+for (i=0; i<list.length; i++) {
+roiManager("reset");
+filename = dir1 + list[i];
+if (endsWith(filename, ".czi")) {//Change file format here to process others
+	run("Bio-Formats Windowless Importer", "open=["+filename+"]");
+	OG_Image = getTitle();
+	getDimensions(width, height, channels, slices, frames);
+	
+	run("Select All");
+	run("Measure");
+	ImageSize = getResult("Area");
+	close("results");
+	run("Select None");
+	getPixelSize(unit, pixelWidth, pixelHeight);
+	if (unit == "micron"||unit == "Micron"||unit == "microns"||unit == "Microns)"){
+	getPixelSize(unit, pixelWidth, pixelHeight);
+	Scale = 1/pixelWidth;
+	UnitCheck = 1;
+	}else{
+	UnitCheck = 0;
+	}
+	
+	run("Duplicate...", "duplicate");
+	FinalImageCopy = getTitle();
+	setTool("freehand");
+	selectWindow(OG_Image);
+	waitForUser("Select analysis area rejecting cells on the edge. Or press Ctrl A to select all.");
+	ROI_Check();
+	run("Clear Outside", "stack");
+	resetThreshold();
+	roiManager("reset");
+	run("Select None");
+	
+	//Detect Nuclei
+	Stack.setChannel(5);
+	run("Duplicate...", " ");
+	Nuclei_WC = getTitle();
+	run("Subtract Background...", "rolling=100");
+	run("Gaussian Blur...", "sigma=5");
+	
+	run("Threshold...");
+		if (i==0){
+		setAutoThreshold("MinError dark");
+		}else{
+		setThreshold(n_lower, n_upper);
+		}
+	waitForUser("Set Correct Threshold to highlight nuclei. Holes inside the nuclei will be filled");
+	getThreshold(n_lower, n_upper);
+	run("Convert to Mask");
+	run("Fill Holes");
+	run("Watershed");
+	run("Analyze Particles...", "size=50-Infinity exclude add slice");
+	selectWindow(OG_Image);
+	wait(100);
+	run("Wand Tool...", "tolerance=19731 mode=8-connected smooth");
+	roiManager("show all with labels");
+	waitForUser("Check and redraw Nuclei if necessary. Press Ctrl + T to add each one");
+	
+	Count = roiManager("count");
+	roiManager("save", dir2+OG_Image+"_Nucleus_ROI.zip");
+	roiManager("reset");
+	close(Nuclei_WC);
+	
+	//Whole Cell
+	selectWindow(OG_Image);
+	run("Select None");
+	Stack.setChannel(1);
+	run("Duplicate...", " ");;
+	PI_WC = getTitle();
+	selectWindow(OG_Image);
+	Stack.setChannel(5);
+	run("Duplicate...", " ");
+	Nuclei_WC = getTitle();
+	imageCalculator("Add create", Nuclei_WC,PI_WC);
+	Whole_Cell = getTitle();
+	run("Subtract Background...", "rolling=100");
+	run("Gaussian Blur...", "sigma=3");
+	if (i==0){
+		setAutoThreshold("MinError dark");
+		}else{
+		setThreshold(w_lower, w_upper);
+		}
+		waitForUser("Set Correct Threshold to highlight cell area");
+		getThreshold(w_lower, w_upper);
+	run("Create Selection");
+	roiManager("Add");
+	roiManager("save", dir2+OG_Image+"_Cell_ROI.zip");
+	roiManager("reset");
+	close(PI_WC);
+	close(Nuclei_WC);
+	close(Whole_Cell);
+	
+		Analysis_Array = newArray(4);
+
+		selectWindow(OG_Image);
+		
+		//Analysis
+		for (a = 0; a < 2; a++){
+		Total_N_IntDen = 0;
+		roiManager("open", dir2+OG_Image+"_Nucleus_ROI.zip");	
+		for (n= 0; n <Count; n++){
+		selectWindow(OG_Image);
+		Stack.setChannel(2+a);
+		roiManager("select", n);
+		run("Measure");
+		IntDen = getResult("IntDen");
+		Total_N_IntDen = Total_N_IntDen + IntDen;
+		run("Clear", "slice");
+			if (a == 0){
+			Analysis_Array[0] = Total_N_IntDen;
+			}
+			if (a == 1){
+			Analysis_Array[2] = Total_N_IntDen;
+			}
+		}
+		roiManager("reset");
+		roiManager("open", dir2+OG_Image+"_Cell_ROI.zip");	
+		roiManager("select", 0);
+		run("Measure");
+		if (a == 0){
+		Analysis_Array[1] = getResult("IntDen");
+		}
+		if (a == 1){
+		Analysis_Array[3] = getResult("IntDen");
+		}
+		roiManager("reset");
+		}
+		
+Ratio1 = Analysis_Array[0]/Analysis_Array[1];
+
+Ratio2 = Analysis_Array[2]/Analysis_Array[3];
+
+//Prepare a log table for the data to be logged
+TableTitle= "Channel Ratio Analysis";
+TableTitle2="["+TableTitle+"]";
+Results = isOpen(TableTitle);
+
+
+if (Results==true) {
+selectWindow(TableTitle);
+}else{
+run("Table...", "name="+TableTitle2+" width=600 height=250");
+print(TableTitle2, "\\Headings:Image Name\tTotal Cells\tCh2 Nucleus IntDen\tCh2 Cytoplasm IntDen\tCh2 Ratio\tLower/Upper Threshold\tCh3 Nucleus IntDen\tCh3 Cytoplasm IntDen\tCh3 Ratio\tLower/Upper Threshold");
+}
+print(TableTitle2,OG_Image+"\t"+Count+"\t"+Analysis_Array[0]+"\t"+Analysis_Array[1]+"\t"+Ratio1+"\t"+n_lower+"/"+n_upper+"\t"+Analysis_Array[2]+"\t"+Analysis_Array[3]+"\t"+Ratio2+"\t"+w_lower+"/"+ w_upper);
+run("Collect Garbage");
+roiManager("reset");
+
+close(OG_Image);
+selectWindow(FinalImageCopy);
+Stack.setChannel(1);
+run("Red");
+Stack.setChannel(2);
+run("Green");
+Stack.setChannel(3);
+run("Magenta");
+Stack.setChannel(4);
+run("Grays");
+Stack.setChannel(5);
+run("Blue");
+Stack.setDisplayMode("composite");
+Stack.setActiveChannels("11101");
+run("RGB Color");
+RGB_Output = getTitle();
+roiManager("open", dir2+OG_Image+"_Cell_ROI.zip");
+roiManager("open", dir2+OG_Image+"_Nucleus_ROI.zip");
+roiManager("Show All without labels");
+run("Flatten");
+Final_Output = getTitle();
+saveAs("Jpeg", dir2+OG_Image+"_Output");
+close(FinalImageCopy);
+close(RGB_Output);
+close(Final_Output);
+}
+}
+
+waitForUser("Analysis is complete. Please save your data table.");
+
+function ROI_Check(){
+	run("Measure");
+	Check = getResult("Area");
+	close("Results");
+while (Check == ImageSize){
+	waitForUser("You have not drawn an ROI");
+	run("Measure");
+	Check = getResult("Area");
+	close("Results");
+}
+}
